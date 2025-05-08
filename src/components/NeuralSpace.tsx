@@ -43,7 +43,7 @@ const NeuralSpace: React.FC<NeuralSpaceProps> = ({
     // Neural network particle system
     const createNeuralSystem = () => {
       const geometry = new THREE.BufferGeometry();
-      const particleCount = 2000;
+      const particleCount = window.innerWidth < 768 ? 1000 : 1500;
       const positions = new Float32Array(particleCount * 3);
       const velocities = new Float32Array(particleCount * 3);
       const colors = new Float32Array(particleCount * 3);
@@ -100,66 +100,55 @@ const NeuralSpace: React.FC<NeuralSpaceProps> = ({
     const animate = (time: number) => {
       timeRef.current = time * 0.001;
       if (!sceneRef.current || !cameraRef.current || !rendererRef.current) return;
-      // Update particles
+
+      if (timeRef.current % 0.1 < 0.016) {
+        updateNeuralConnections();
+      }
+
       particlesRef.current.forEach(particles => {
         const positions = particles.geometry.attributes.position.array as Float32Array;
         const velocities = particles.geometry.attributes.velocity.array as Float32Array;
         const colors = particles.geometry.attributes.color.array as Float32Array;
+        
         for (let i = 0; i < positions.length; i += 3) {
-          // Apply velocity and forces
           positions[i] += velocities[i];
           positions[i + 1] += velocities[i + 1];
           positions[i + 2] += velocities[i + 2];
-          // Audio reactivity
+
           if (audioData && i < audioData.length) {
             const audioValue = Math.abs(audioData[i]);
-            positions[i] += audioValue * 0.1;
-            positions[i + 1] += audioValue * 0.1;
-            colors[i] = Math.min(1, colors[i] + audioValue * 0.1);
+            const influence = audioValue * 0.1;
+            positions[i] += influence;
+            positions[i + 1] += influence;
+            colors[i] = Math.min(1, colors[i] + influence);
           }
-          // Mouse interaction
+
           const dx = positions[i] - mouseRef.current.x * 30;
           const dy = positions[i + 1] - mouseRef.current.y * 30;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 10) {
-            positions[i] += dx * 0.02;
-            positions[i + 1] += dy * 0.02;
+          const distSquared = dx * dx + dy * dy;
+          if (distSquared < 100) {
+            const influence = 0.02 / Math.sqrt(distSquared);
+            positions[i] += dx * influence;
+            positions[i + 1] += dy * influence;
             colors[i] = Math.min(1, colors[i] + 0.1);
           }
-          // Boundary check with smooth wrapping
+
           const bound = 30;
           if (Math.abs(positions[i]) > bound) positions[i] *= -0.95;
           if (Math.abs(positions[i + 1]) > bound) positions[i + 1] *= -0.95;
           if (Math.abs(positions[i + 2]) > bound) positions[i + 2] *= -0.95;
         }
+
         particles.geometry.attributes.position.needsUpdate = true;
         particles.geometry.attributes.color.needsUpdate = true;
-        // Rotation based on audio
+
         if (audioData) {
           const avgAudio = Array.from(audioData).reduce((a, b) => a + Math.abs(b), 0) / audioData.length;
           particles.rotation.x += 0.001 + avgAudio * 0.01;
           particles.rotation.y += 0.001 + avgAudio * 0.01;
         }
       });
-      // Update neural connections
-      if (neuralLinesRef.current) {
-        const positions = particlesRef.current[0].geometry.attributes.position.array as Float32Array;
-        const linePositions: number[] = [];
-        const maxDistance = 5;
-        for (let i = 0; i < positions.length; i += 3) {
-          for (let j = i + 3; j < positions.length; j += 3) {
-            const dx = positions[i] - positions[j];
-            const dy = positions[i + 1] - positions[j + 1];
-            const dz = positions[i + 2] - positions[j + 2];
-            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (dist < maxDistance) {
-              linePositions.push(positions[i], positions[i + 1], positions[i + 2], positions[j], positions[j + 1], positions[j + 2]);
-            }
-          }
-        }
-        neuralLinesRef.current.geometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
-      }
-      // Add glow effect through additive blending and opacity
+
       rendererRef.current.setClearColor(0x000000, 0);
       rendererRef.current.render(scene, camera);
       requestAnimationFrame(animate);
@@ -185,6 +174,32 @@ const NeuralSpace: React.FC<NeuralSpaceProps> = ({
     mouseRef.current.x = cursorPosition.x / window.innerWidth * 2 - 1;
     mouseRef.current.y = -(cursorPosition.y / window.innerHeight) * 2 + 1;
   }, [cursorPosition]);
+
+  const updateNeuralConnections = () => {
+    if (!neuralLinesRef.current) return;
+    const positions = particlesRef.current[0].geometry.attributes.position.array as Float32Array;
+    const linePositions: number[] = [];
+    const maxDistance = 5;
+    const maxConnections = 1000;
+    let connectionCount = 0;
+
+    for (let i = 0; i < positions.length && connectionCount < maxConnections; i += 3) {
+      for (let j = i + 3; j < positions.length && connectionCount < maxConnections; j += 3) {
+        const dx = positions[i] - positions[j];
+        const dy = positions[i + 1] - positions[j + 1];
+        const dz = positions[i + 2] - positions[j + 2];
+        const distSquared = dx * dx + dy * dy + dz * dz;
+        
+        if (distSquared < maxDistance * maxDistance) {
+          linePositions.push(positions[i], positions[i + 1], positions[i + 2], positions[j], positions[j + 1], positions[j + 2]);
+          connectionCount++;
+        }
+      }
+    }
+
+    neuralLinesRef.current.geometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+  };
+
   return <div ref={containerRef} className="fixed inset-0 -z-10" />;
 };
 export default NeuralSpace;

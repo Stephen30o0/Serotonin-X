@@ -56,6 +56,9 @@ const AboutPage: React.FC<AboutPageProps> = ({
                         <img
                           src={member.image}
                           alt={member.name}
+                          loading="lazy"
+                          width={300}
+                          height={400}
                           className="object-cover w-full h-full filter grayscale transition-all duration-700 group-hover:grayscale-0"
                         />
                       </div>

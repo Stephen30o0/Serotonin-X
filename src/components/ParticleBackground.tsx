@@ -40,22 +40,27 @@ const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
     // Create multiple particle systems
     const createParticleSystem = (count: number, size: number, color: number, speed: number) => {
       const geometry = new THREE.BufferGeometry();
-      const positions = new Float32Array(count * 3);
-      const velocities = new Float32Array(count * 3);
-      const sizes = new Float32Array(count);
-      for (let i = 0; i < count; i++) {
+      // Reduce particle count based on screen size
+      const adjustedCount = window.innerWidth < 768 ? Math.floor(count * 0.6) : count;
+      const positions = new Float32Array(adjustedCount * 3);
+      const velocities = new Float32Array(adjustedCount * 3);
+      const sizes = new Float32Array(adjustedCount);
+      
+      for (let i = 0; i < adjustedCount; i++) {
         const i3 = i * 3;
-        positions[i3] = (Math.random() - 0.5) * 100; // Increased spread
+        positions[i3] = (Math.random() - 0.5) * 100;
         positions[i3 + 1] = (Math.random() - 0.5) * 100;
         positions[i3 + 2] = (Math.random() - 0.5) * 100;
         velocities[i3] = (Math.random() - 0.5) * speed;
         velocities[i3 + 1] = (Math.random() - 0.5) * speed;
         velocities[i3 + 2] = (Math.random() - 0.5) * speed;
-        sizes[i] = Math.random() * 2 + 0.5; // Varied sizes
+        sizes[i] = Math.random() * 2 + 0.5;
       }
+      
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
       geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+      
       const material = new THREE.PointsMaterial({
         size,
         color,
@@ -64,13 +69,14 @@ const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
         blending: THREE.AdditiveBlending,
         sizeAttenuation: true
       });
+      
       return new THREE.Points(geometry, material);
     };
     // Create more particle systems with different characteristics
-    const primaryParticles = createParticleSystem(2000, 0.3, 0xffffff, 0.03);
-    const accentParticles1 = createParticleSystem(500, 0.4, 0x00ffff, 0.04);
-    const accentParticles2 = createParticleSystem(500, 0.4, 0xff00ff, 0.04);
-    const backgroundParticles = createParticleSystem(1000, 0.2, 0x0066ff, 0.02);
+    const primaryParticles = createParticleSystem(1500, 0.3, 0xffffff, 0.03);
+    const accentParticles1 = createParticleSystem(300, 0.4, 0x00ffff, 0.04);
+    const accentParticles2 = createParticleSystem(300, 0.4, 0xff00ff, 0.04);
+    const backgroundParticles = createParticleSystem(800, 0.2, 0x0066ff, 0.02);
     scene.add(primaryParticles);
     scene.add(accentParticles1);
     scene.add(accentParticles2);
@@ -89,58 +95,53 @@ const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
     linesMeshRef.current = linesMesh;
     // Animation
     const animate = (time: number) => {
-      timeRef.current = time * 0.001; // Convert to seconds
+      timeRef.current = time * 0.001;
       if (!sceneRef.current || !cameraRef.current || !rendererRef.current) return;
-      // Update particles
+
+      // Throttle neural network line updates
+      if (timeRef.current % 0.1 < 0.016) { // Update every 100ms
+        updateNeuralLines();
+      }
+
+      // Update particles with optimized calculations
       particlesRef.current.forEach((particles, index) => {
         const positions = particles.geometry.attributes.position.array as Float32Array;
         const velocities = particles.geometry.attributes.velocity.array as Float32Array;
         const sizes = particles.geometry.attributes.size.array as Float32Array;
+        
         for (let i = 0; i < positions.length; i += 3) {
-          // Enhanced wave motion
-          positions[i + 1] += Math.sin(timeRef.current * 0.5 + positions[i] * 0.05) * 0.04;
-          // Stronger mouse influence
+          // Optimize wave motion calculation
+          const waveInfluence = Math.sin(timeRef.current * 0.5 + positions[i] * 0.05) * 0.04;
+          positions[i + 1] += waveInfluence;
+
+          // Optimize mouse interaction with squared distance
           const dx = positions[i] - mouseRef.current.x * 50;
           const dy = positions[i + 1] - -mouseRef.current.y * 50;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 20) {
-            positions[i] += dx * 0.03;
-            positions[i + 1] += dy * 0.03;
-            // Particle size pulsing
+          const distSquared = dx * dx + dy * dy;
+          
+          if (distSquared < 400) { // 20^2
+            const influence = 0.03 / Math.sqrt(distSquared);
+            positions[i] += dx * influence;
+            positions[i + 1] += dy * influence;
             sizes[i / 3] = (Math.sin(timeRef.current * 2) + 2) * 0.5;
           }
-          // Boundary check with smoother wrapping
+
+          // Optimize boundary check
           const bound = 50;
           if (Math.abs(positions[i]) > bound) positions[i] *= -0.98;
           if (Math.abs(positions[i + 1]) > bound) positions[i + 1] *= -0.98;
           if (Math.abs(positions[i + 2]) > bound) positions[i + 2] *= -0.98;
         }
+
         particles.geometry.attributes.position.needsUpdate = true;
         particles.geometry.attributes.size.needsUpdate = true;
-        // Dynamic rotation based on mouse position
-        particles.rotation.x += 0.0002 * (1 + Math.abs(mouseRef.current.y));
-        particles.rotation.y += 0.0002 * (1 + Math.abs(mouseRef.current.x));
+
+        // Optimize rotation
+        const rotationSpeed = 0.0002;
+        particles.rotation.x += rotationSpeed * (1 + Math.abs(mouseRef.current.y));
+        particles.rotation.y += rotationSpeed * (1 + Math.abs(mouseRef.current.x));
       });
-      // Update neural network lines
-      const primaryPositions = particlesRef.current[0].geometry.attributes.position.array as Float32Array;
-      const linePositions: number[] = [];
-      const maxDistance = 5;
-      for (let i = 0; i < primaryPositions.length; i += 3) {
-        const x1 = primaryPositions[i];
-        const y1 = primaryPositions[i + 1];
-        const z1 = primaryPositions[i + 2];
-        for (let j = i + 3; j < primaryPositions.length; j += 3) {
-          const x2 = primaryPositions[j];
-          const y2 = primaryPositions[j + 1];
-          const z2 = primaryPositions[j + 2];
-          const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2);
-          if (dist < maxDistance) {
-            linePositions.push(x1, y1, z1, x2, y2, z2);
-          }
-        }
-      }
-      linesMeshRef.current!.geometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
-      // Render scene
+
       rendererRef.current.render(sceneRef.current, cameraRef.current);
       frameRef.current = requestAnimationFrame(animate);
     };
@@ -173,6 +174,34 @@ const ParticleBackground: React.FC<ParticleBackgroundProps> = ({
     mouseRef.current.x = cursorPosition.x / window.innerWidth * 2 - 1;
     mouseRef.current.y = -(cursorPosition.y / window.innerHeight) * 2 + 1;
   }, [cursorPosition]);
+  // Separate neural lines update for better performance
+  const updateNeuralLines = () => {
+    if (!linesMeshRef.current) return;
+    const primaryPositions = particlesRef.current[0].geometry.attributes.position.array as Float32Array;
+    const linePositions: number[] = [];
+    const maxDistance = 5;
+    const maxConnections = 800; // Limit number of connections
+    let connectionCount = 0;
+
+    for (let i = 0; i < primaryPositions.length && connectionCount < maxConnections; i += 3) {
+      for (let j = i + 3; j < primaryPositions.length && connectionCount < maxConnections; j += 3) {
+        const dx = primaryPositions[i] - primaryPositions[j];
+        const dy = primaryPositions[i + 1] - primaryPositions[j + 1];
+        const dz = primaryPositions[i + 2] - primaryPositions[j + 2];
+        const distSquared = dx * dx + dy * dy + dz * dz;
+        
+        if (distSquared < maxDistance * maxDistance) {
+          linePositions.push(
+            primaryPositions[i], primaryPositions[i + 1], primaryPositions[i + 2],
+            primaryPositions[j], primaryPositions[j + 1], primaryPositions[j + 2]
+          );
+          connectionCount++;
+        }
+      }
+    }
+
+    linesMeshRef.current.geometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+  };
   return <div ref={containerRef} className="fixed inset-0 -z-10" />;
 };
 export default ParticleBackground;

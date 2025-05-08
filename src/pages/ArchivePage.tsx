@@ -52,7 +52,14 @@ const ArchivePage: React.FC<ArchivePageProps> = ({
           {filteredArchives.map(item => <div key={item.title} className="group" onMouseEnter={() => setCursorType('hover')} onMouseLeave={() => setCursorType('default')}>
               <div className="relative overflow-hidden">
                 <div className="aspect-[16/9]">
-                  <img src={item.image} alt={item.title} className="object-cover w-full h-full transition-transform duration-700 group-hover:scale-105" />
+                  <img
+                    src={item.image}
+                    alt={item.title}
+                    loading="lazy"
+                    width={800}
+                    height={450}
+                    className="object-cover w-full h-full transition-transform duration-700 group-hover:scale-105"
+                  />
                 </div>
                 <div className="absolute inset-0 bg-black bg-opacity-40 transition-opacity duration-500 group-hover:bg-opacity-20" />
               </div>
